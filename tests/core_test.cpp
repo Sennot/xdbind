@@ -36,7 +36,7 @@ int main() {
     assert(!gate.release(k.key));
     assert(!gate.consumed(k.key));
     gate.press(k.key); gate.reset(); assert(!gate.consumed(k.key));
-    for (auto extension : {".gdr", ".GDR2", ".json", ".xd", ".slc"}) assert(mb::macroExtension(extension));
+    for (auto extension : {".gdr", ".GDR2", ".json", ".xd", ".slc", ".cml", ".CML"}) assert(mb::macroExtension(extension));
     for (auto extension : {".dll", ".cbf", ".zcb", ".txt", ""}) assert(!mb::macroExtension(extension));
     // Only the success notification of our scoped load is hidden. Warnings,
     // errors, ordinary xdBot loads and later notifications retain their behavior.

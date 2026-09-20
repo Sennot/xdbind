@@ -3,7 +3,7 @@
   "gd": { "win": "2.2081" },
   "id": "sennot.macro_binds",
   "name": "Macro Binds",
-  "version": "v1.0.1",
+  "version": "v1.0.2",
   "developer": "Sennot",
   "description": "A separate macro hotkey menu for xdBot. Load only, without the success popup.",
   "dependencies": {

@@ -1,14 +1,19 @@
 {
-  "release": "1.0.1",
+  "release": "1.0.2",
   "passed": [
-    "catalog_test with -Wall -Wextra -Werror and UBSan: subfolders, Unicode, autosaves, custom directory, deduplication, unavailable roots, sidecar exclusion, cancellation, symlink cycle, refresh",
-    "existing core_test with -Wall -Wextra -Werror and UBSan",
-    "manifest JSON and previous dependency/CMake corrections",
-    "PauseLayer hook removed; existing keyboard entry point retained"
+    "core_test: CML/CML uppercase extension and existing binding/load-scope checks, UBSan + warnings as errors",
+    "catalog_test: CML; Folder replaces source; Auto uses configured root only; empty and missing selection stays empty; deleted files absent after refresh; nested Unicode paths; sidecars; duplicate paths; errors; cancellation; directory cycle",
+    "static supported-DLL evidence: native load -> importer dispatcher -> CML header checker and decoder"
   ],
   "not_run": [
     "Windows/Geode build",
-    "in-game UI and native load"
+    "in-game CML loading/playback and UI"
   ],
-  "diagnosis": "Old catalog only scanned the top level of the configured macros folder. Exact runtime cause of the user empty list is unconfirmed; added known folder discovery, recursive background scan, explicit manual Folder selection and path/error logging."
+  "changes": [
+    "Add .cml extension",
+    "Remove historical/autosave fallback search",
+    "Saved bindings no longer inject files into current catalog",
+    "Clear old rows as soon as a new scan starts",
+    "Retain F8-only menu and previous CMake/manifest fixes"
+  ]
 }

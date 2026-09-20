@@ -53,5 +53,29 @@ int main() {
     auto refreshed = mb::scanFolders({macros}, cancelled);
     assert(refreshed.files.size() == 2);
     for (auto const& file : refreshed.files) assert(file.filename() != "one.gdr");
-    std::cout << "PASS catalog: nested and Unicode paths, autosaves, manual folder, duplicate roots, sidecars, errors, cancellation, directory cycle, refresh\n";
+
+    // Manual selection REPLACES the source. Other existing folders must not
+    // contribute files, and choosing an empty/missing folder must stay empty.
+    write(external / "precise.cml");
+    write(external / "upper.CML");
+    write(external / "precise.cml.cbf");
+    auto selected = mb::scanFolders(mb::catalogRoots(macros, external, base), cancelled);
+    assert(selected.files.size() == 3 && selected.issues.empty());
+    for (auto const& path : selected.files) assert(path.parent_path() == external);
+    const auto cml = mb::absolutePath(external / "precise.cml");
+    assert(std::find(selected.files.begin(), selected.files.end(), cml) != selected.files.end());
+    auto automatic = mb::scanFolders(mb::catalogRoots(macros, {}, base), cancelled);
+    assert(automatic.files == refreshed.files); // No autosaves or previous Folder source.
+    auto empty = base / "empty";
+    fs::create_directory(empty);
+    assert(mb::scanFolders(mb::catalogRoots(macros, empty, base), cancelled).files.empty());
+    auto missing = mb::scanFolders(mb::catalogRoots(macros, base / "missing", base), cancelled);
+    assert(missing.files.empty() && missing.issues.size() == 1);
+    assert(mb::catalogRoots({}, {}, base).empty());
+    assert(mb::catalogRoots({}, "chosen-folder", base) == std::vector<fs::path>{external});
+    fs::remove(cml);
+    auto afterDelete = mb::scanFolders(mb::catalogRoots(macros, external, base), cancelled);
+    assert(afterDelete.files.size() == 2);
+    assert(std::find(afterDelete.files.begin(), afterDelete.files.end(), cml) == afterDelete.files.end());
+    std::cout << "PASS catalog: CML, exclusive folder selection, Auto, empty/missing selection without fallback, deleted files, nested Unicode paths, deduplication, sidecars, errors, cancellation, cycles, refresh\n";
 }

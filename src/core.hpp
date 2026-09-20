@@ -78,6 +78,6 @@ inline std::string lowerAscii(std::string text) {
 inline bool macroExtension(std::string extension) {
     extension = lowerAscii(std::move(extension));
     return extension == ".gdr" || extension == ".gdr2" || extension == ".json" ||
-           extension == ".xd" || extension == ".slc";
+           extension == ".xd" || extension == ".slc" || extension == ".cml";
 }
 }

@@ -73,7 +73,6 @@ struct Entry {
     fs::path path;
     std::string id;
     std::string name;
-    bool missing = false;
 };
 
 class BindsPopup final : public Popup {
@@ -113,38 +112,35 @@ class BindsPopup final : public Popup {
         m_scan = std::make_shared<std::atomic_bool>(false);
         m_scanning = true;
         m_roots.clear();
+        m_catalog.clear();
+        m_visible.clear();
+        m_capture.clear();
+        m_page = 0;
+        drawRows();
         auto* xdbot = Loader::get()->getLoadedMod("zilko.xdbot");
-        if (!xdbot) { m_scanning = false; status("xdBot is not loaded"); return; }
-        auto addRoot = [&](fs::path path) {
-            if (path.empty()) return;
-            // A saved relative path must not depend on the process working directory.
-            if (path.is_relative()) path = dirs::getGameDir() / path;
-            m_roots.push_back(std::move(path));
-        };
-        for (auto key : {"macros_folder", "autosaves_folder"}) {
-            auto folder = xdbot->getSettingValue<fs::path>(key);
+        fs::path configured;
+        // Retain the saved key from 1.0.1 so an already chosen folder keeps working.
+        auto selected = fromUtf8(Mod::get()->getSavedValue<std::string>("extra-folder", ""));
+        if (selected.empty() && xdbot) {
+            configured = xdbot->getSettingValue<fs::path>("macros_folder");
             // Also handle settings supplied by another registered setting type.
-            if (folder.empty()) {
-                if (auto setting = xdbot->getSetting(key)) {
+            if (configured.empty()) {
+                if (auto setting = xdbot->getSetting("macros_folder")) {
                     matjson::Value value;
                     if (setting->save(value)) {
                         auto text = value.asString();
-                        if (text) folder = fromUtf8(text.unwrap());
+                        if (text) configured = fromUtf8(text.unwrap());
                     }
                 }
             }
-            if (folder.empty()) log::warn("Macro Binds: xdBot setting '{}' has no folder", key);
-            addRoot(folder);
         }
-        // Current and historical xdBot defaults. Missing defaults are optional.
-        for (auto const& base : {xdbot->getSaveDir(), dirs::getGameDir()}) {
-            for (auto name : {"macros", "autosaves"}) {
-                auto folder = base / name;
-                std::error_code ec;
-                if (fs::is_directory(folder, ec)) addRoot(folder);
-            }
+        m_roots = catalogRoots(configured, selected, dirs::getGameDir());
+        if (m_roots.empty()) {
+            m_scanning = false;
+            status("Macro folder unavailable. Choose Folder.");
+            drawRows();
+            return;
         }
-        addRoot(fromUtf8(Mod::get()->getSavedValue<std::string>("extra-folder", "")));
         for (auto const& root : m_roots) log::info("Macro Binds: scanning {}", utf8(root));
         status("Searching...");
         drawRows();
@@ -168,25 +164,20 @@ class BindsPopup final : public Popup {
         std::unordered_map<std::string, std::string> savedIDs;
         for (auto const& saved : bindings.items())
             savedIDs.emplace(pathKey(absolutePath(fromUtf8(saved.path))), saved.path);
-        auto add = [&](fs::path path, bool missing) {
+        auto add = [&](fs::path path) {
             auto id = utf8(path);
             auto key = pathKey(path);
             if (!seen.insert(key).second) return;
             // Keep the exact persisted spelling so existing hotkeys stay attached.
             if (auto it = savedIDs.find(key); it != savedIDs.end()) id = it->second;
             auto name = utf8(path.filename());
-            m_catalog.push_back({std::move(path), std::move(id), std::move(name), missing});
+            m_catalog.push_back({std::move(path), std::move(id), std::move(name)});
         };
-        for (auto const& path : result.files) add(path, false);
+        for (auto const& path : result.files) add(path);
         for (auto const& issue : result.issues)
             log::warn("Macro Binds: could not scan '{}': {}", utf8(issue.path), issue.message);
-        // Keep saved bindings visible if a macro was moved/deleted; never silently discard them.
-        for (auto const& item : bindings.items()) {
-            auto path = absolutePath(fromUtf8(item.path));
-            std::error_code ec;
-            bool missing = !fs::is_regular_file(path, ec);
-            add(path, missing);
-        }
+        // Bindings only annotate files found in this folder. They must never
+        // inject old/deleted files or files from another folder into this list.
         std::sort(m_catalog.begin(), m_catalog.end(), [](Entry const& a, Entry const& b) {
             auto an = lowerAscii(a.name), bn = lowerAscii(b.name);
             return an == bn ? a.id < b.id : an < bn;
@@ -220,6 +211,9 @@ class BindsPopup final : public Popup {
     void onAuto(CCObject*) {
         Mod::get()->setSavedValue("extra-folder", std::string());
         saveFolderSelection();
+        m_onlyBound = false;
+        m_search.clear();
+        m_searchInput->setString("");
         m_capture.clear();
         scan();
     }
@@ -259,7 +253,6 @@ class BindsPopup final : public Popup {
             name->setAnchorPoint({0.f, .5f});
             name->setPosition({26.f, y});
             name->limitLabelWidth(219.f, .6f, .2f);
-            if (item.missing) name->setColor({255, 130, 130});
             m_rows->addChild(name);
             auto key = bindings.keyFor(item.id);
             auto label = m_capture == item.id ? "..." : key ? chordText(*key) : "Bind";

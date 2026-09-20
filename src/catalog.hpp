@@ -34,6 +34,17 @@ struct CatalogResult {
     size_t folders = 0;
 };
 
+// Folder is an override, not another search source. Auto uses only xdBot's
+// configured macro folder; historical defaults and autosaves are never merged.
+inline std::vector<std::filesystem::path> catalogRoots(
+    std::filesystem::path const& configured, std::filesystem::path const& selected,
+    std::filesystem::path const& gameDir) {
+    auto root = selected.empty() ? configured : selected;
+    if (root.empty()) return {};
+    if (root.is_relative()) root = gameDir / root;
+    return {root.lexically_normal()};
+}
+
 // Disk-only code: safe to run away from the game thread. Do not follow directory
 // links; overlapping roots must not duplicate files or recurse forever.
 inline CatalogResult scanFolders(std::vector<std::filesystem::path> const& roots,
