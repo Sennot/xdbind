@@ -1,0 +1,37 @@
+name: Build Macro Binds
+
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Binding logic checks
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all tests/core_test.cpp -o core-test
+          ./core-test
+
+  build:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Windows mod
+        id: geode
+        uses: geode-sdk/build-geode-mod@main
+        with:
+          sdk: given
+          target: Win64
+          build-config: Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Macro-Binds-Windows
+          path: ${{ steps.geode.outputs.build-output }}
+          if-no-files-found: error

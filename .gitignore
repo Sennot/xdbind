@@ -1,0 +1,4 @@
+/build/
+*.geode
+*.dll
+__pycache__/

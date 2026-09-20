@@ -1,0 +1,41 @@
+{
+  "created_utc": "2026-09-20T09:00:07.484187+00:00",
+  "checks": [
+    {
+      "command": [
+        "g++",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-fsanitize=undefined",
+        "-fno-sanitize-recover=all",
+        "tests/core_test.cpp",
+        "-o",
+        "/workspace/scratch/1075d599b62b/output/macro-binds-1.0.0/core-test"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "command": [
+        "/workspace/scratch/1075d599b62b/output/macro-binds-1.0.0/core-test"
+      ],
+      "exit_code": 0,
+      "output": "PASS bindings: key reassignment, modifiers, invalid entries, copy/restore, release ownership, repeat gate, macro extensions\nPASS scoped load: success-only suppression, single consumption, errors remain visible, state cleared between loads\n"
+    },
+    {
+      "command": [
+        "python3",
+        "tests/verify_target.py",
+        "/workspace/scratch/1075d599b62b/upload/1a495434-7b7b-446b-8611-51705d515e10.geode"
+      ],
+      "exit_code": 0,
+      "output": "PASS binary: SHA-256, PE identity, four function boundaries/prefixes, native autoplay call, success notification, Geode imports\nPASS unsupported/mutated DLL rejected before using addresses\n"
+    }
+  ],
+  "full_windows_build": "not run; Windows workflow included",
+  "in_game_execution": "not run; runtime compatibility needs an in-game smoke test",
+  "source_headers_reviewed": "Geode SDK v5.10.0, GD 2.2081 bindings, matjson v3.3.1",
+  "supported_dll_sha256": "8252391a4abd9efec83a06b2a7320236e189aa20e7d8b49d26dbf358d2d0126e"
+}

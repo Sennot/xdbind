@@ -1,0 +1,30 @@
+{
+  "dll_sha256": "8252391a4abd9efec83a06b2a7320236e189aa20e7d8b49d26dbf358d2d0126e",
+  "pe_timestamp": 1788463614,
+  "image_size": 3731456,
+  "size_bytes": 3574272,
+  "entries": {
+    "global_get": {
+      "rva": 68864,
+      "prefix": "554883ec30488d6c243048c745f8feff"
+    },
+    "macro_cell_create": {
+      "rva": 1933984,
+      "prefix": "55415741565657534881ecd800000048"
+    },
+    "macro_cell_load": {
+      "rva": 1939520,
+      "prefix": "555657534881ecc8080000488dac2480"
+    },
+    "toggle_playing": {
+      "rva": 726720,
+      "prefix": "564883ec30e826adfbffa8017502eb02"
+    }
+  },
+  "global_state_offset": 1832,
+  "global_instance_rva": 3406984,
+  "macro_cell_path_offset": 352,
+  "macro_loaded_string_rva": 2768586,
+  "macro_loaded_call_rva": 1943213,
+  "toggle_playing_call_rva": 1942623
+}
