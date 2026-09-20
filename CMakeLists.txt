@@ -15,4 +15,9 @@ add_library(${PROJECT_NAME} SHARED src/main.cpp src/bridge.cpp)
 target_compile_definitions(${PROJECT_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(${PROJECT_NAME} PRIVATE bcrypt)
 # Geode must use the same keyword signature as the bcrypt link above.
-setup_geode_mod(${PROJECT_NAME} LINK_TYPE PRIVATE)
+# xdBot is supplied separately; there are no public headers/libs to fetch.
+# Keep the required runtime dependency in mod.json.
+setup_geode_mod(${PROJECT_NAME}
+    LINK_TYPE PRIVATE
+    EXTERNALS "zilko.xdbot:=2.7.7"
+)
