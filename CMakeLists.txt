@@ -14,4 +14,5 @@ endif()
 add_library(${PROJECT_NAME} SHARED src/main.cpp src/bridge.cpp)
 target_compile_definitions(${PROJECT_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(${PROJECT_NAME} PRIVATE bcrypt)
-setup_geode_mod(${PROJECT_NAME})
+# Geode must use the same keyword signature as the bcrypt link above.
+setup_geode_mod(${PROJECT_NAME} LINK_TYPE PRIVATE)
