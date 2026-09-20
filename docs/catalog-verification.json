@@ -1,0 +1,14 @@
+{
+  "release": "1.0.1",
+  "passed": [
+    "catalog_test with -Wall -Wextra -Werror and UBSan: subfolders, Unicode, autosaves, custom directory, deduplication, unavailable roots, sidecar exclusion, cancellation, symlink cycle, refresh",
+    "existing core_test with -Wall -Wextra -Werror and UBSan",
+    "manifest JSON and previous dependency/CMake corrections",
+    "PauseLayer hook removed; existing keyboard entry point retained"
+  ],
+  "not_run": [
+    "Windows/Geode build",
+    "in-game UI and native load"
+  ],
+  "diagnosis": "Old catalog only scanned the top level of the configured macros folder. Exact runtime cause of the user empty list is unconfirmed; added known folder discovery, recursive background scan, explicit manual Folder selection and path/error logging."
+}

@@ -1,13 +1,17 @@
 #include "core.hpp"
 #include "bridge.hpp"
+#include "catalog.hpp"
 #include <Geode/Geode.hpp>
-#include <Geode/modify/PauseLayer.hpp>
 #include <Geode/ui/Popup.hpp>
 #include <Geode/ui/TextInput.hpp>
 #include <Geode/utils/Keyboard.hpp>
+#include <Geode/utils/async.hpp>
+#include <Geode/utils/file.hpp>
 #include <Geode/loader/SettingV3.hpp>
 #include <filesystem>
 #include <set>
+#include <thread>
+#include <unordered_map>
 
 using namespace geode::prelude;
 namespace fs = std::filesystem;
@@ -18,12 +22,6 @@ BindsPopup* openPopup = nullptr;
 Bindings bindings;
 PressGate gate;
 bool bindingsRead = false;
-
-std::string utf8(fs::path const& path) {
-    auto bytes = path.generic_u8string();
-    return {bytes.begin(), bytes.end()};
-}
-fs::path fromUtf8(std::string const& text) { return fs::u8path(text); }
 
 void readBindings() {
     if (bindingsRead) return;
@@ -90,6 +88,11 @@ class BindsPopup final : public Popup {
     CCLabelBMFont* m_status = nullptr;
     CCLabelBMFont* m_pageLabel = nullptr;
     bool m_onlyBound = false;
+    std::shared_ptr<std::atomic_bool> m_scan;
+    async::TaskHolder<file::PickResult> m_folderPicker;
+    std::vector<fs::path> m_roots;
+    std::string m_scanStatus;
+    bool m_scanning = false;
 
     CCMenuItemSpriteExtra* button(CCMenu* menu, std::string const& text, CCPoint at,
                                  SEL_MenuHandler callback, int tag = 0, float width = 60.f) {
@@ -106,32 +109,80 @@ class BindsPopup final : public Popup {
         m_status->limitLabelWidth(398.f, .42f, .2f);
     }
     void scan() {
+        if (m_scan) m_scan->store(true);
+        m_scan = std::make_shared<std::atomic_bool>(false);
+        m_scanning = true;
+        m_roots.clear();
+        auto* xdbot = Loader::get()->getLoadedMod("zilko.xdbot");
+        if (!xdbot) { m_scanning = false; status("xdBot is not loaded"); return; }
+        auto addRoot = [&](fs::path path) {
+            if (path.empty()) return;
+            // A saved relative path must not depend on the process working directory.
+            if (path.is_relative()) path = dirs::getGameDir() / path;
+            m_roots.push_back(std::move(path));
+        };
+        for (auto key : {"macros_folder", "autosaves_folder"}) {
+            auto folder = xdbot->getSettingValue<fs::path>(key);
+            // Also handle settings supplied by another registered setting type.
+            if (folder.empty()) {
+                if (auto setting = xdbot->getSetting(key)) {
+                    matjson::Value value;
+                    if (setting->save(value)) {
+                        auto text = value.asString();
+                        if (text) folder = fromUtf8(text.unwrap());
+                    }
+                }
+            }
+            if (folder.empty()) log::warn("Macro Binds: xdBot setting '{}' has no folder", key);
+            addRoot(folder);
+        }
+        // Current and historical xdBot defaults. Missing defaults are optional.
+        for (auto const& base : {xdbot->getSaveDir(), dirs::getGameDir()}) {
+            for (auto name : {"macros", "autosaves"}) {
+                auto folder = base / name;
+                std::error_code ec;
+                if (fs::is_directory(folder, ec)) addRoot(folder);
+            }
+        }
+        addRoot(fromUtf8(Mod::get()->getSavedValue<std::string>("extra-folder", "")));
+        for (auto const& root : m_roots) log::info("Macro Binds: scanning {}", utf8(root));
+        status("Searching...");
+        drawRows();
+        auto token = m_scan;
+        auto* loader = Loader::get();
+        std::thread([roots = m_roots, token, loader] {
+            CatalogResult result;
+            try { result = scanFolders(roots, *token); }
+            catch (std::exception const& error) { result.issues.push_back({{}, error.what()}); }
+            if (token->load()) return;
+            loader->queueInMainThread([token, result = std::move(result)]() mutable {
+                if (token->load() || !openPopup || openPopup->m_scan != token) return;
+                openPopup->finishScan(std::move(result));
+            });
+        }).detach();
+    }
+    void finishScan(CatalogResult result) {
+        m_scanning = false;
         m_catalog.clear();
         std::set<std::string> seen;
+        std::unordered_map<std::string, std::string> savedIDs;
+        for (auto const& saved : bindings.items())
+            savedIDs.emplace(pathKey(absolutePath(fromUtf8(saved.path))), saved.path);
         auto add = [&](fs::path path, bool missing) {
-            std::error_code ec;
-            auto canonical = fs::weakly_canonical(path, ec);
-            if (!ec) path = canonical;
             auto id = utf8(path);
-            if (!seen.insert(id).second) return;
+            auto key = pathKey(path);
+            if (!seen.insert(key).second) return;
+            // Keep the exact persisted spelling so existing hotkeys stay attached.
+            if (auto it = savedIDs.find(key); it != savedIDs.end()) id = it->second;
             auto name = utf8(path.filename());
             m_catalog.push_back({std::move(path), std::move(id), std::move(name), missing});
         };
-        if (auto* xdbot = Loader::get()->getLoadedMod("zilko.xdbot")) {
-            auto folder = xdbot->getSettingValue<fs::path>("macros_folder");
-            std::error_code ec;
-            fs::directory_iterator it(folder, fs::directory_options::skip_permission_denied, ec), end;
-            while (!ec && it != end) {
-                std::error_code itemError;
-                if (it->is_regular_file(itemError) && macroExtension(utf8(it->path().extension())))
-                    add(it->path(), false);
-                it.increment(ec);
-            }
-            if (ec) status("Could not read xdBot's macro folder");
-        }
+        for (auto const& path : result.files) add(path, false);
+        for (auto const& issue : result.issues)
+            log::warn("Macro Binds: could not scan '{}': {}", utf8(issue.path), issue.message);
         // Keep saved bindings visible if a macro was moved/deleted; never silently discard them.
         for (auto const& item : bindings.items()) {
-            auto path = fromUtf8(item.path);
+            auto path = absolutePath(fromUtf8(item.path));
             std::error_code ec;
             bool missing = !fs::is_regular_file(path, ec);
             add(path, missing);
@@ -141,6 +192,43 @@ class BindsPopup final : public Popup {
             return an == bn ? a.id < b.id : an < bn;
         });
         filter();
+        m_scanStatus = result.files.empty() ? "No macros found. Choose Folder." :
+            fmt::format("{} macros", result.files.size());
+        if (!result.issues.empty()) m_scanStatus += " | Some folders unavailable";
+        log::info("Macro Binds: found {} macros in {} folders ({} scan errors)",
+            result.files.size(), result.folders, result.issues.size());
+        if (!capturing()) status(ensureBridge() ? m_scanStatus : bridgeError());
+    }
+    void onFolder(CCObject*) {
+        m_searchInput->defocus();
+        m_capture.clear();
+        drawRows();
+        file::FilePickOptions options;
+        options.defaultPath = m_roots.empty() ? dirs::getGameDir() : m_roots.front();
+        m_folderPicker.spawn(file::pick(file::PickMode::OpenFolder, options), [this](file::PickResult result) {
+            if (!result) { status("Could not open folder picker"); return; }
+            if (!result.unwrap()) return;
+            Mod::get()->setSavedValue("extra-folder", utf8(*result.unwrap()));
+            saveFolderSelection();
+            m_onlyBound = false;
+            m_search.clear();
+            m_searchInput->setString("");
+            m_page = 0;
+            scan();
+        });
+    }
+    void onAuto(CCObject*) {
+        Mod::get()->setSavedValue("extra-folder", std::string());
+        saveFolderSelection();
+        m_capture.clear();
+        scan();
+    }
+    void saveFolderSelection() {
+        auto saved = Mod::get()->saveData();
+        if (!saved) {
+            log::error("Macro Binds folder save failed: {}", saved.unwrapErr());
+            Notification::create("Could not save folder", NotificationIcon::Error)->show();
+        }
     }
     void filter() {
         m_visible.clear();
@@ -180,7 +268,7 @@ class BindsPopup final : public Popup {
             button(menu, "X", {402.f, y}, menu_selector(BindsPopup::onClear), static_cast<int>(index), 21.f);
         }
         if (m_visible.empty()) {
-            auto* empty = CCLabelBMFont::create("No macros", "bigFont.fnt");
+            auto* empty = CCLabelBMFont::create(m_scanning ? "Searching..." : "No macros", "bigFont.fnt");
             empty->setScale(.55f);
             empty->setPosition({220, 151});
             m_rows->addChild(empty);
@@ -238,7 +326,9 @@ class BindsPopup final : public Popup {
         controls->setPosition({0, 0});
         m_mainLayer->addChild(controls);
         button(controls, "All / Bound", {343, 249}, menu_selector(BindsPopup::onFilter), 0, 114);
-        button(controls, "<", {168, 48}, menu_selector(BindsPopup::onPrevious), 0, 25);
+        button(controls, "Folder", {58, 48}, menu_selector(BindsPopup::onFolder), 0, 65);
+        button(controls, "Auto", {124, 48}, menu_selector(BindsPopup::onAuto), 0, 47);
+        button(controls, "<", {176, 48}, menu_selector(BindsPopup::onPrevious), 0, 25);
         button(controls, ">", {272, 48}, menu_selector(BindsPopup::onNext), 0, 25);
         button(controls, "Refresh", {368, 48}, menu_selector(BindsPopup::onRefresh), 0, 78);
         scan();
@@ -246,12 +336,17 @@ class BindsPopup final : public Popup {
         return true;
     }
     void onClose(CCObject* sender) override {
+        if (m_scan) m_scan->store(true);
+        m_folderPicker.cancel();
         m_capture.clear();
         if (openPopup == this) openPopup = nullptr;
         Popup::onClose(sender);
     }
 public:
-    ~BindsPopup() override { if (openPopup == this) openPopup = nullptr; }
+    ~BindsPopup() override {
+        if (m_scan) m_scan->store(true);
+        if (openPopup == this) openPopup = nullptr;
+    }
     static BindsPopup* create() {
         auto* popup = new BindsPopup;
         if (!popup->init()) { delete popup; return nullptr; }
@@ -346,20 +441,3 @@ $execute {
     // Runs before Geode forwards keys to xdBot's default bindings (including K).
     KeyboardInputEvent().listen(&mb::onKeyboard, -10000).leak();
 }
-
-class $modify(MacroBindsPause, PauseLayer) {
-    void customSetup() {
-        PauseLayer::customSetup();
-        auto* menu = CCMenu::create();
-        menu->setID("sennot.macro_binds/menu");
-        menu->setPosition({0, 0});
-        auto* sprite = ButtonSprite::create("Binds", "bigFont.fnt", "GJ_button_01.png");
-        sprite->setScale(.48f);
-        auto* button = CCMenuItemSpriteExtra::create(sprite, this, menu_selector(MacroBindsPause::onBinds));
-        auto size = CCDirector::sharedDirector()->getWinSize();
-        button->setPosition({size.width - 40.f, 22.f});
-        menu->addChild(button);
-        addChild(menu, 100);
-    }
-    void onBinds(CCObject*) { mb::showMenu(); }
-};

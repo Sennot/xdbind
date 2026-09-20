@@ -2,3 +2,7 @@
 *.geode
 *.dll
 __pycache__/
+/core-test
+/catalog-test
+/tests/core-test
+/tests/catalog-test

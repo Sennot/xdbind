@@ -19,9 +19,9 @@ See `binary-profile.json` for the complete fingerprint. All addresses below are 
 
 The add-on creates a real native MacroCell through the factory and a real, invisible CCLayer for its parent calls. It does not fake an object layout, copy a private Macro struct, retain stale cell addresses, or write directly to the global macro/state. Windows release std::string and std::filesystem::path ABI sizes are asserted. Three Geode-managed hooks observe the native success notification, hide its show call, and ignore automatic playback toggles only during the synchronous load scope. Outside that scope each hook forwards normally.
 
-Key events use Geode 5.10's KeyboardInputEvent with priority -10000, ahead of the built-in keybind dispatcher. File loading is queued onto the game's main thread. Per-input work is an in-memory binding lookup; there are no polling threads or frame-by-frame directory scans. Parsing time and accuracy remain those of xdBot's native importer/player.
+Key events use Geode 5.10's KeyboardInputEvent with priority -10000, ahead of the built-in keybind dispatcher. File loading is queued onto the game's main thread. Per-input work is an in-memory binding lookup; there are no polling threads or frame-by-frame directory scans. Parsing time and accuracy remain those of xdBot's native importer/player. F8 is the menu entry point; no PauseLayer hook or button is installed.
 
-Saved paths are UTF-8; conversion to the Windows filesystem uses std::filesystem::u8path. Directory enumeration happens when opening/refreshing the menu; text search operates on the cached list. Six rows per page bound UI node count for large directories. ASCII filename case is folded for search; other Unicode characters match literally.
+Saved paths are UTF-8; conversion to the Windows filesystem uses the C++20 char8_t path constructor. A cancellable worker enumerates xdBot's configured macro/autosave folders, existing game/save-directory defaults and the optional saved Folder selection. It searches subfolders, skips directory links and deduplicates overlapping roots. Completion is queued on the game thread and ignored after the popup closes or a newer scan starts. Text search operates on the cached list. Six rows per page bound UI node count. Paths and scan errors are logged; the exact cause of the user's original empty list is not confirmed without their runtime folder values.
 
 ## Reference material checked
 
@@ -35,6 +35,8 @@ Saved paths are UTF-8; conversion to the Windows filesystem uses std::filesystem
 ```sh
 g++ -std=c++20 -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all tests/core_test.cpp -o core-test
 ./core-test
+g++ -std=c++20 -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all tests/catalog_test.cpp -o catalog-test
+./catalog-test
 python tests/verify_target.py /path/to/the/supplied.geode
 ```
 
