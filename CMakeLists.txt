@@ -17,7 +17,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE bcrypt)
 # Geode must use the same keyword signature as the bcrypt link above.
 # xdBot is supplied separately; there are no public headers/libs to fetch.
 # Keep the required runtime dependency in mod.json.
+# EXTERNALS takes a concrete version, not a version constraint (no '=').
 setup_geode_mod(${PROJECT_NAME}
     LINK_TYPE PRIVATE
-    EXTERNALS "zilko.xdbot:=2.7.7"
+    EXTERNALS "zilko.xdbot:2.7.7"
 )
