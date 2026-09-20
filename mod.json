@@ -7,7 +7,7 @@
   "developer": "Sennot",
   "description": "A separate macro hotkey menu for xdBot. Load only, without the success popup.",
   "dependencies": {
-    "zilko.xdbot": { "version": "=v2.7.7", "importance": "required" }
+    "zilko.xdbot": { "version": ">=v2.7.7", "importance": "required" }
   },
   "settings": {
     "enabled": { "type": "bool", "name": "Enabled", "default": true },
